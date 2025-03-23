@@ -346,7 +346,10 @@ fastboot reboot recovery
 [CENTER][/CENTER]"""
 
     # Write content to temporary file
-    output_path = "/tmp/generated_xda_thread.txt"
+    output_folder = "out"
+    if not os.path.exists(output_folder):
+        os.makedirs(output_folder)
+    output_path = os.path.join(output_folder, "generated_xda_thread.txt")
     try:
         with open(output_path, "w") as f:
             f.write(thread_content)
