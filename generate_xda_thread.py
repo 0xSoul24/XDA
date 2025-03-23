@@ -266,16 +266,32 @@ def generate_thread():
                 f"{RED}Invalid format. Please enter a valid URL starting with 'http://' or 'https://'.{ENDCOLOR}"
             )
 
-    # Device OTA URL
+    # Device OTA URL and build type
     support_pattern = r"^(https?://)?(www\.)?(github\.com)(.*)"
     while True:
-        device_ota_url = input("Device OTA URL: ").strip()
-        if re.match(support_pattern, device_ota_url):
+        print("Choose the build type:")
+        print("1. Official")
+        print("2. Unofficial")
+        build_type = input("Build type (1 or 2): ").strip()
+        if build_type in ("1", "2"):
             break
         else:
-            print(
-                f"{RED}Invalid format. Please enter a valid URL from GitHub, GitLab, or Bitbucket.{ENDCOLOR}"
-            )
+            print(f"{RED}Invalid selection. Please enter 1 or 2.{ENDCOLOR}")
+    if build_type == "1":
+        device_ota_url = "https://github.com/Evolution-X/OTA"
+        print(f"Official build selected. Device OTA URL set to: {device_ota_url}")
+    else:
+        ota_url_pattern = (
+            r"^(https?://)?(www\.)?(github\.com|gitlab\.com|bitbucket\.org)(.*)"
+        )
+        while True:
+            device_ota_url = input("Device OTA URL: ").strip()
+            if re.match(ota_url_pattern, device_ota_url):
+                break
+            else:
+                print(
+                    f"{RED}Invalid format. Please enter a valid URL from the appropriate service.{ENDCOLOR}"
+                )
 
     # Separate username and repository from the OTA URL
     url_pattern = r"(?:https?://)?(?:www\.)?(github\.com)/([^/]+)/([^/]+)/?"
@@ -292,7 +308,12 @@ def generate_thread():
     downloads = []
 
     for device, code in zip(device_array, codename_list):
-        json_url = f"https://raw.githubusercontent.com/{username}/{repo}/refs/heads/{selected_branch}/builds/{code}.json"
+        if platform == "github.com":
+            json_url = f"https://raw.githubusercontent.com/{username}/{repo}/refs/heads/{selected_branch}/builds/{code}.json"
+        elif platform == "gitlab.com":
+            json_url = f"https://gitlab.com/{username}/{repo}/-/raw/{selected_branch}/builds/{code}.json"
+        elif platform == "bitbucket.org":
+            json_url = f"https://bitbucket.org/{username}/{repo}/raw/{selected_branch}/builds/{code}.json"
         print(f"Trying to retrieve {code}.json from {json_url}...")
         try:
             response = requests.get(json_url)
@@ -435,14 +456,22 @@ rom:
         installation_images = info.get("installation_images", {})
         if isinstance(installation_images, dict):
             for label, filename in installation_images.items():
+                if "sourceforge.net" in info["separated_download_link"]:
+                    link = f"{info['separated_download_link']}{filename}/{filename}"
+                else:
+                    link = f"{info['separated_download_link']}{filename}"
                 thread_content_2 += f"""
 {label}:
-{info['separated_download_link']}{filename}"""
+{link}"""
         elif isinstance(installation_images, list):
             for filename in installation_images:
+                if "sourceforge.net" in info["separated_download_link"]:
+                    link = f"{info['separated_download_link']}{filename}/{filename}.img"
+                else:
+                    link = f"{info['separated_download_link']}{filename}.img"
                 thread_content_2 += f"""
-{filename}:
-{info['separated_download_link']}{filename}.img"""
+\n{filename}:
+{link}"""
         thread_content_2 += "\n[/SPOILER]"
 
     thread_content_2 += "\n[/SPOILER]"
