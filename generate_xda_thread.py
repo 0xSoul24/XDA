@@ -25,11 +25,13 @@ def display_header():
     print(f"{BLUE}                         #KeepEvolving                      {ENDCOLOR}")
     print(f"{GREEN}==========================================================={ENDCOLOR}")
 
+
 def input_nonempty(prompt):
     while True:
         data = input(prompt).strip()
         if data:
             return data
+
 
 def generate_thread():
     os.system("clear")
@@ -75,13 +77,16 @@ def generate_thread():
         device_name = f"[COLOR=rgb(0, 96, 255)][B][SIZE=6]{device}[/SIZE][/B][/COLOR]"
         codename = input(f"Codename for {device}: ").strip()
         codenames = f"[COLOR=rgb(0, 96, 255)][B][SIZE=6][{codename}][/SIZE][/B][/COLOR]"
+        codename_list = [codename]
     else:
         device_name = "[COLOR=rgb(0, 96, 255)][B][SIZE=6]"
         codenames = "[COLOR=rgb(0, 96, 255)][B][SIZE=6]"
+        codename_list = []
         for i, device in enumerate(device_array):
             device = device.strip()
             device_name += device
             codename = input(f"Codename for {device}: ").strip()
+            codename_list.append(codename)
             codenames += f"[{codename}]"
             if i != device_count - 1:
                 if i == device_count - 2:
@@ -261,6 +266,79 @@ def generate_thread():
                 f"{RED}Invalid format. Please enter a valid URL starting with 'http://' or 'https://'.{ENDCOLOR}"
             )
 
+    # Device OTA URL
+    support_pattern = r"^(https?://)?(www\.)?(github\.com)(.*)"
+    while True:
+        device_ota_url = input("Device OTA URL: ").strip()
+        if re.match(support_pattern, device_ota_url):
+            break
+        else:
+            print(
+                f"{RED}Invalid format. Please enter a valid URL from GitHub, GitLab, or Bitbucket.{ENDCOLOR}"
+            )
+
+    # Separate username and repository from the OTA URL
+    url_pattern = r"(?:https?://)?(?:www\.)?(github\.com)/([^/]+)/([^/]+)/?"
+    match = re.search(url_pattern, device_ota_url)
+    if match:
+        platform = match.group(1)
+        username = match.group(2)
+        repo = match.group(3)
+    else:
+        print(
+            f"{RED}Failed to parse the OTA URL for username and repository.{ENDCOLOR}"
+        )
+
+    downloads = []
+
+    for device, code in zip(device_array, codename_list):
+        json_url = f"https://raw.githubusercontent.com/{username}/{repo}/refs/heads/{selected_branch}/builds/{code}.json"
+        print(f"Trying to retrieve {code}.json from {json_url}...")
+        try:
+            response = requests.get(json_url)
+            response.raise_for_status()
+            data = response.json()
+        except requests.RequestException as e:
+            print(f"Error fetching the JSON data for {code}: {e}")
+            continue
+
+        except ValueError as e:
+            print(f"Error decoding JSON for {code}: {e}")
+            continue
+
+        # Retrieve the first response object
+        items = data.get("response", [])
+        if items:
+            info = items[0]
+            download_link = info.get("download")
+            initial_installation_images = info.get("initial_installation_images", {})
+            print(f"Download link for {code}: {download_link}")
+            print(
+                f"Initial Installation Images for {code}: {initial_installation_images}"
+            )
+        else:
+            print(f"No response found in the JSON data for {code}.")
+            continue
+
+        # Separate the filename from the download link
+        keyword = "Evolution"
+        idx = download_link.find(keyword)
+        if idx != -1:
+            separated_download_link = download_link[:idx]
+        else:
+            print(f"Keyword not found in the URL for {code}.")
+            continue
+
+        downloads.append(
+            {
+                "device": device,
+                "codename": code,
+                "download_link": download_link,
+                "separated_download_link": separated_download_link,
+                "installation_images": initial_installation_images,
+            }
+        )
+
     # Prepare the thread content
     thread_content = f"""[CENTER]
 {manufacturer_name} {device_name}
@@ -345,18 +423,49 @@ fastboot reboot recovery
 [/TABLE]
 [CENTER][/CENTER]"""
 
-    # Write content to temporary file
+    thread_content_2 = f"""[CENTER][SIZE=22][B][COLOR=#0060FF]Latest Downloads[/COLOR][/B][/SIZE][/CENTER]
+\n[SPOILER="Builds with PixelGapps included (Full experience)"]"""
+    for info in downloads:
+        thread_content_2 += f"""
+[SPOILER="{info['device']} ({info['codename']})"]
+rom:
+{info['download_link']}"""
+
+        # Loop over installation images, supporting both dict and list formats
+        installation_images = info.get("installation_images", {})
+        if isinstance(installation_images, dict):
+            for label, filename in installation_images.items():
+                thread_content_2 += f"""
+{label}:
+{info['separated_download_link']}{filename}"""
+        elif isinstance(installation_images, list):
+            for filename in installation_images:
+                thread_content_2 += f"""
+{filename}:
+{info['separated_download_link']}{filename}.img"""
+        thread_content_2 += "\n[/SPOILER]"
+
+    thread_content_2 += "\n[/SPOILER]"
+
+    # Write content to output files in the "out" folder
     output_folder = "out"
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
-    output_path = os.path.join(output_folder, "generated_xda_thread.txt")
+
+    output_path_1 = os.path.join(output_folder, "generated_xda_thread.txt")
+    output_path_2 = os.path.join(output_folder, "2nd_post.txt")
     try:
-        with open(output_path, "w") as f:
+        with open(output_path_1, "w") as f:
             f.write(thread_content)
-        print(f"{GREEN}Thread saved to '{output_path}'{ENDCOLOR}")
+        with open(output_path_2, "w") as f:
+            f.write(thread_content_2)
+        print(
+            f"{GREEN}Threads saved to '{output_path_1}' and '{output_path_2}'{ENDCOLOR}"
+        )
     except Exception as e:
         print(f"{RED}Error saving thread: {e}{ENDCOLOR}")
         sys.exit(1)
+
 
 if __name__ == "__main__":
     generate_thread()
