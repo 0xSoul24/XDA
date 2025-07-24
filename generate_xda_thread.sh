@@ -23,6 +23,9 @@ generate_thread() {
 
   clear && display_header
 
+    # Get current branch name
+    current_branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)
+
     # Device manufacturer
     while true; do
         read -p "Manufacturer name: " manufacturer
@@ -230,12 +233,15 @@ generate_thread() {
             fi
         done
 
+        # Create out directory if it doesn't exist
+        mkdir -p out
+        
         cat << EOF > /tmp/generated_xda_thread.txt
 [CENTER]
 $manufacturer_name $device_name
 $codenames
 
-[IMG]https://raw.githubusercontent.com/Evolution-X/XDA/udc/assets/$banner_image[/IMG]
+[IMG]https://raw.githubusercontent.com/Evolution-X/XDA/$current_branch/assets/$banner_image[/IMG]
 
 [SIZE=5][B][COLOR=#0060FF][B]Pixel UI, customization and more, we are Evolution X![/B][/COLOR][/B][/SIZE]
 
@@ -245,15 +251,15 @@ $codenames
 
 Check out our [URL='https://evolution-x.org/']website[/URL]!
 
-[IMG]https://raw.githubusercontent.com/Evolution-X/XDA/udc/assets/features.png[/IMG]
+[IMG]https://raw.githubusercontent.com/Evolution-X/XDA/$current_branch/assets/features.png[/IMG]
 
-[URL='https://github.com/Evolution-X/XDA/blob/udc/features.md']Added features[/URL]
+[URL='https://github.com/Evolution-X/XDA/blob/$current_branch/features.md']Added features[/URL]
 
-[IMG]https://raw.githubusercontent.com/Evolution-X/XDA/udc/assets/known_issues.png[/IMG]
+[IMG]https://raw.githubusercontent.com/Evolution-X/XDA/$current_branch/assets/known_issues.png[/IMG]
 
 [SIZE=5][B][COLOR=red]DO NOT FLASH GAPPS, THEY ARE ALREADY INCLUDED[/COLOR][/B][/SIZE]
 
-[B][IMG]https://raw.githubusercontent.com/Evolution-X/XDA/udc/assets/installation.png[/IMG][/B]
+[B][IMG]https://raw.githubusercontent.com/Evolution-X/XDA/$current_branch/assets/installation.png[/IMG][/B]
 
 [SPOILER]
 [SIZE=5][B][COLOR=rgb(0, 96, 255)][SIZE=5][B]First Time Install[/B][/SIZE][/COLOR][/B][/SIZE]
@@ -283,11 +289,11 @@ fastboot reboot recovery
 2. Reboot & #KeepEvolving[/SIZE]
 [/SPOILER]
 
-[URL='$donation_url'][IMG width="200px" height="180px"]https://raw.githubusercontent.com/Evolution-X/XDA/udc/assets/donate_to_me.png[/IMG][/URL][URL='https://discord.gg/3qbSZHx'][IMG width="200px" height="180px"]https://raw.githubusercontent.com/Evolution-X/XDA/udc/assets/official_chat.png[/IMG][/URL][/CENTER]
+[URL='$donation_url'][IMG width="200px" height="180px"]https://raw.githubusercontent.com/Evolution-X/XDA/$current_branch/assets/donate_to_me.png[/IMG][/URL][URL='https://discord.gg/3qbSZHx'][IMG width="200px" height="180px"]https://raw.githubusercontent.com/Evolution-X/XDA/$current_branch/assets/official_chat.png[/IMG][/URL][/CENTER]
 
 [TABLE]
 [TR]
-[TD][IMG]https://raw.githubusercontent.com/Evolution-X/XDA/udc/assets/source.png[/IMG][/TD]
+[TD][IMG]https://raw.githubusercontent.com/Evolution-X/XDA/$current_branch/assets/source.png[/IMG][/TD]
 [/TR]
 [TR]
 [TD][B][COLOR=rgb(97, 189, 109)]Android version[/COLOR]:[/B] [URL='$tree_url']$android_version[/URL][/TD]
