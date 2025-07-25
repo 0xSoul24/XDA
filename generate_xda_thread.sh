@@ -5,6 +5,14 @@ BLUE='\033[0;34m'
 RED='\033[0;31m'
 ENDCOLOR='\033[0m'
 
+# Global variables
+declare -a device_array
+declare -a codename_array
+device_count=0
+selected_branch=""
+android_version=""
+codename=""
+
 display_header() {
     echo -e "${GREEN}===========================================================${ENDCOLOR}"
     echo -e "${BLUE}      ______            __      __  _                _  __  ${ENDCOLOR}"
@@ -67,6 +75,7 @@ generate_thread() {
             device_name="[COLOR=rgb(0, 96, 255)][B][SIZE=6]$device[/SIZE][/B][/COLOR]"
             echo "Codename for $device: "
             read codename
+            codename_array[0]="$codename"
             codenames="[COLOR=rgb(0, 96, 255)][B][SIZE=6][$codename][/SIZE][/B][/COLOR]"
         else
             device_name="[COLOR=rgb(0, 96, 255)][B][SIZE=6]"
@@ -75,8 +84,9 @@ generate_thread() {
                 device="${device_array[i]}"
                 device_name+="$device"
                 echo "Codename for $device: "
-                read codename
-                codenames+="[$codename]"
+                read codename_input
+                codename_array[i]="$codename_input"
+                codenames+="[$codename_input]"
                 if [ $i -ne $(($device_count - 1)) ]; then
                     if [ $i -eq $(($device_count - 2)) ]; then
                         device_name+=" & "
@@ -89,6 +99,8 @@ generate_thread() {
             done
             device_name+="[/SIZE][/B][/COLOR]"
             codenames+="[/SIZE][/B][/COLOR]"
+            # Set codename to the first one for backward compatibility
+            codename="${codename_array[0]}"
         fi
 
         # Banner styles
@@ -164,19 +176,40 @@ generate_thread() {
             xml_data=$(curl -s "$raw_manifest_url")
             tree_url="https://github.com/Evolution-X/manifest/tree/$selected_branch"
 
-            if [[ ! -z "$xml_data" ]]; then
-                android_version=$(echo "$xml_data" | grep -oP '(?<=revision="refs/tags/android-)[^"]+')
+            # Set Android version based on branch name
+            case $selected_branch in
+                "bka")
+                    android_version="16"
+                    ;;
+                "vic")
+                    android_version="15"
+                    ;;
+                "u")
+                    android_version="14"
+                    ;;
+                "t")
+                    android_version="13"
+                    ;;
+                "s")
+                    android_version="12"
+                    ;;
+                *)
+                    # Try to extract from XML as fallback
+                    android_version=$(echo "$xml_data" | grep -oP '(?<=revision="refs/tags/android-)[^"]+')
+                    if [[ -z "$android_version" ]]; then
+                        echo -e "${RED}Android version not found for branch $selected_branch.${ENDCOLOR}"
+                        continue
+                    fi
+                    ;;
+            esac
 
-                if [[ ! -z "$android_version" ]]; then
-                    echo -e "${GREEN}Android version detected: $android_version${ENDCOLOR}"
-                    blob_manifest_url="https://github.com/Evolution-X/manifest/blob/$selected_branch/"
-                    break
-                else
-                    echo -e "${RED}Android version not found in the XML.${ENDCOLOR}"
-                fi
+            if [[ ! -z "$android_version" ]]; then
+                echo -e "${GREEN}Android version detected: $android_version${ENDCOLOR}"
+                blob_manifest_url="https://github.com/Evolution-X/manifest/blob/$selected_branch/"
+                break
             else
-                echo -e "${RED}Failed to fetch XML data from $raw_manifest_url.${ENDCOLOR}"
-             fi
+                echo -e "${RED}Android version not found in the XML.${ENDCOLOR}"
+            fi
         done
 
         # Kernel source URL
@@ -232,9 +265,6 @@ generate_thread() {
                 echo -e "${RED}Invalid format. Please enter a valid URL starting with 'http://' or 'https://'.${ENDCOLOR}"
             fi
         done
-
-        # Create out directory if it doesn't exist
-        mkdir -p out
         
         cat << EOF > /tmp/generated_xda_thread.txt
 [CENTER]
@@ -323,4 +353,212 @@ EOF
     fi
 }
 
+generate_second_post() {
+    # Check if we have multiple devices (stored in device_array)
+    if [ ${#device_array[@]} -gt 1 ]; then
+        echo -e "${BLUE}Generating second post for multiple devices${ENDCOLOR}"
+        
+        # Create the initial part of the second post
+        cat << EOF > /tmp/generated_xda_second_post.txt
+Latest downloads
+
+
+
+[SPOILER="Builds with PixelGapps included (Full experience)"]
+EOF
+        
+        # Generate spoiler for each device
+        for ((i=0; i<${#device_array[@]}; i++)); do
+            device="${device_array[i]}"
+            current_codename="${codename_array[i]}"
+            
+            # Fetch OTA JSON data for current device
+            ota_url="https://raw.githubusercontent.com/Evolution-X/OTA/refs/heads/$selected_branch/builds/$current_codename.json"
+            echo -e "${BLUE}Fetching OTA data for $device ($current_codename): $ota_url${ENDCOLOR}"
+            
+            ota_json=$(curl -s "$ota_url")
+            
+            # Check if the JSON was successfully fetched
+            if [[ -z "$ota_json" || "$ota_json" == *"404"* ]]; then
+                echo -e "${RED}Failed to fetch OTA data for $current_codename. Using default template.${ENDCOLOR}"
+                # Construct full device name intelligently
+                if [[ "$device" =~ ^[0-9] ]] || [[ "$device" =~ ^(Pro|XL|Mini|Plus|Ultra|Max|Lite|Note) ]]; then
+                    # If device starts with number or common suffixes, prepend the base device name
+                    base_device_name="${device_array[0]%% *}"  # Get first word from first device (e.g., "Pixel" from "Pixel 4")
+                    device_display_name="$base_device_name $device"
+                else
+                    device_display_name="$device"
+                fi
+                rom_filename="EvolutionX-$android_version-$(date +%Y%m%d)-$current_codename-UNOFFICIAL.zip"
+                
+                # Default images if OTA fetch fails
+                default_images=("boot" "dtbo" "vbmeta" "super_empty" "KernelSU-Next")
+                installation_images_links=""
+                for image in "${default_images[@]}"; do
+                    installation_images_links+="\n\n$image:\n\n\nhttps://cdn.evolution-x.org/$current_codename/$android_version/$image.img\n"
+                done
+            else
+                echo -e "${GREEN}OTA data fetched successfully for $current_codename${ENDCOLOR}"
+                
+                # Parse JSON to extract variables (use device from script, not JSON)
+                # Construct full device name intelligently
+                if [[ "$device" =~ ^[0-9] ]] || [[ "$device" =~ ^(Pro|XL|Mini|Plus|Ultra|Max|Lite|Note|Fold) ]]; then
+                    # If device starts with number or common suffixes, prepend the base device name
+                    base_device_name="${device_array[0]%% *}"  # Get first word from first device (e.g., "Pixel" from "Pixel 4")
+                    device_display_name="$base_device_name $device"
+                else
+                    device_display_name="$device"
+                fi
+                rom_filename=$(echo "$ota_json" | jq -r '.response[0].filename // ""')
+                
+                # Extract initial installation images and extra images
+                initial_images=$(echo "$ota_json" | jq -r '.response[0].initial_installation_images[]? // empty')
+                extra_images=$(echo "$ota_json" | jq -r '.response[0].extra_images[]? // empty')
+                
+                # If filename is empty, generate a default one
+                if [[ -z "$rom_filename" || "$rom_filename" == "null" ]]; then
+                    rom_filename="EvolutionX-$android_version-$(date +%Y%m%d)-$current_codename-UNOFFICIAL.zip"
+                fi
+                
+                # Generate installation images links
+                installation_images_links=""
+                if [[ -n "$initial_images" ]]; then
+                    while IFS= read -r image; do
+                        if [[ -n "$image" ]]; then
+                            installation_images_links+="\n\n$image:\n\n\nhttps://cdn.evolution-x.org/$current_codename/$android_version/$image/$image.img\n"
+                        fi
+                    done <<< "$initial_images"
+                else
+                    default_images=("boot" "dtbo" "vbmeta" "vendor_boot" "vendor_kernel_boot")
+                    for image in "${default_images[@]}"; do
+                        installation_images_links+="\n\n$image:\n\n\nhttps://cdn.evolution-x.org/$current_codename/$android_version/$image/$image.img\n"
+                    done
+                fi
+                
+                # Add extra images if available
+                if [[ -n "$extra_images" ]]; then
+                    while IFS= read -r image; do
+                        if [[ -n "$image" ]]; then
+                            installation_images_links+="\n\n$image:\n\n\nhttps://cdn.evolution-x.org/$current_codename/$android_version/$image/$image.img\n"
+                        fi
+                    done <<< "$extra_images"
+                fi
+            fi
+            
+            # Append this device's spoiler to the file
+            cat << EOF >> /tmp/generated_xda_second_post.txt
+[SPOILER="$device_display_name ($current_codename)"]
+
+rom:
+
+ 
+
+https://cdn.evolution-x.org/$current_codename/$android_version/$rom_filename$(echo -e "$installation_images_links")
+
+[/SPOILER]
+EOF
+        done
+        
+        # Close the main spoiler
+        cat << EOF >> /tmp/generated_xda_second_post.txt
+
+[/SPOILER]
+EOF
+        
+    else
+        # Single device case (existing logic)
+        # Fetch OTA JSON data using the selected branch and codename from the main function
+        ota_url="https://raw.githubusercontent.com/Evolution-X/OTA/refs/heads/$selected_branch/builds/$codename.json"
+        echo -e "${BLUE}Fetching OTA data from: $ota_url${ENDCOLOR}"
+        
+        # Download the JSON file
+        ota_json=$(curl -s "$ota_url")
+        
+        # Check if the JSON was successfully fetched
+        if [[ -z "$ota_json" || "$ota_json" == *"404"* ]]; then
+            echo -e "${RED}Failed to fetch OTA data. Using default template.${ENDCOLOR}"
+            # Fallback to default template (use device from script, not hardcoded)
+            device_display_name="$device"
+            rom_filename="EvolutionX-$android_version-$(date +%Y%m%d)-$codename-UNOFFICIAL.zip"
+            
+            # Default images if OTA fetch fails
+            default_images=("boot" "dtbo" "vbmeta" "super_empty" "KernelSU-Next")
+            installation_images_links=""
+            for image in "${default_images[@]}"; do
+                installation_images_links+="\n\n$image:\n\n\nhttps://cdn.evolution-x.org/$codename/$android_version/$image.img\n"
+            done
+        else
+            echo -e "${GREEN}OTA data fetched successfully${ENDCOLOR}"
+            
+            # Parse JSON to extract variables (use device from script, not JSON)
+            device_display_name="$device"
+            rom_filename=$(echo "$ota_json" | jq -r '.response[0].filename // ""')
+            build_date=$(echo "$ota_json" | jq -r '.response[0].datetime // ""')
+            build_size=$(echo "$ota_json" | jq -r '.response[0].size // ""')
+            build_version=$(echo "$ota_json" | jq -r '.response[0].version // ""')
+            
+            # Extract initial installation images and extra images
+            initial_images=$(echo "$ota_json" | jq -r '.response[0].initial_installation_images[]? // empty')
+            extra_images=$(echo "$ota_json" | jq -r '.response[0].extra_images[]? // empty')
+            
+            # If filename is empty, generate a default one
+            if [[ -z "$rom_filename" || "$rom_filename" == "null" ]]; then
+                if [[ -n "$build_date" && "$build_date" != "null" ]]; then
+                    formatted_date=$(date -d "@$build_date" +%Y%m%d 2>/dev/null || echo "$(date +%Y%m%d)")
+                else
+                    formatted_date=$(date +%Y%m%d)
+                fi
+                rom_filename="EvolutionX-$android_version-$formatted_date-$codename-UNOFFICIAL.zip"
+            fi
+            
+            # Generate installation images links
+            installation_images_links=""
+            if [[ -n "$initial_images" ]]; then
+                while IFS= read -r image; do
+                    if [[ -n "$image" ]]; then
+                        installation_images_links+="\n\n$image:\n\n\nhttps://cdn.evolution-x.org/$codename/$android_version/$image/$image.img\n"
+                    fi
+                done <<< "$initial_images"
+            else
+                # Default images if not found in OTA
+                default_images=("boot" "dtbo" "vbmeta" "vendor_boot" "vendor_kernel_boot")
+                for image in "${default_images[@]}"; do
+                    installation_images_links+="\n\n$image:\n\n\nhttps://cdn.evolution-x.org/$codename/$android_version/$image/$image.img\n"
+                done
+            fi
+            
+            # Add extra images if available
+            if [[ -n "$extra_images" ]]; then
+                while IFS= read -r image; do
+                    if [[ -n "$image" ]]; then
+                        installation_images_links+="\n\n$image:\n\n\nhttps://cdn.evolution-x.org/$codename/$android_version/$image/$image.img\n"
+                    fi
+                done <<< "$extra_images"
+            fi
+        fi
+        
+        cat << EOF > /tmp/generated_xda_second_post.txt
+Latest downloads
+
+
+
+[SPOILER="Builds with PixelGapps included (Full experience)"][SPOILER="$device_display_name ($codename)"]
+
+rom:
+
+ 
+
+https://cdn.evolution-x.org/$codename/$android_version/$rom_filename$(echo -e "$installation_images_links")
+
+[/SPOILER]
+
+[/SPOILER]
+EOF
+    fi
+    
+    echo -e "${GREEN}Second post saved to '/tmp/generated_xda_second_post.txt'${ENDCOLOR}"
+}
+
+# Generate both posts
 generate_thread
+generate_second_post
